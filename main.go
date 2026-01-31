@@ -271,22 +271,42 @@ type OrderCreated struct {
 }
 
 // --- 2. Define the Event Handler ---
-type OrderCreatedHandler struct {
+type OrderCreatedWorker struct {
 	InstanceID string
 }
 
-func (h OrderCreatedHandler) HandlerName() string {
-	return "OrderCreatedHandler"
+func (h OrderCreatedWorker) HandlerName() string {
+	return "OrderCreatedWorker"
 }
 
-func (h OrderCreatedHandler) NewEvent() any {
+func (h OrderCreatedWorker) NewEvent() any {
 	return &OrderCreated{}
 }
 
-func (h OrderCreatedHandler) Handle(ctx context.Context, event interface{}) error {
+func (h OrderCreatedWorker) Handle(ctx context.Context, event interface{}) error {
 	e := event.(*OrderCreated)
 	// Log with the InstanceID to prove different instances are processing the same event
-	log.Printf("[%s] 🔔 RECEIVED event: OrderID=%s", h.InstanceID, e.OrderID)
+	log.Printf("[%s] 🔔 WORKER RECEIVED event: OrderID=%s", h.InstanceID, e.OrderID)
+	return nil
+}
+
+// --- 2. Define the Event Handler ---
+type OrderCreatedListener struct {
+	InstanceID string
+}
+
+func (h OrderCreatedListener) HandlerName() string {
+	return "OrderCreatedListener"
+}
+
+func (h OrderCreatedListener) NewEvent() any {
+	return &OrderCreated{}
+}
+
+func (h OrderCreatedListener) Handle(ctx context.Context, event interface{}) error {
+	e := event.(*OrderCreated)
+	// Log with the InstanceID to prove different instances are processing the same event
+	log.Printf("[%s] 🔔 LISTENER RECEIVED event: OrderID=%s", h.InstanceID, e.OrderID)
 	return nil
 }
 
@@ -347,7 +367,36 @@ func main() {
 		router.Close()
 	}()
 
-	eventProcessor, err := cqrs.NewEventProcessorWithConfig(
+	workerProcessor, err := cqrs.NewEventProcessorWithConfig(
+		router,
+		cqrs.EventProcessorConfig{
+			GenerateSubscribeTopic: func(params cqrs.EventProcessorGenerateSubscribeTopicParams) (string, error) {
+				return params.EventName, nil
+			},
+			// PRODUCER: Connects the CQRS bus to the SQL Publisher
+			SubscriberConstructor: func(params cqrs.EventProcessorSubscriberConstructorParams) (message.Subscriber, error) {
+				// !!! KEY LOGIC FOR QUEUE !!!
+				// Single consumer group per handler - each event is handled by one subscriber.
+				return watermillsql.NewSubscriber(
+					db,
+					watermillsql.SubscriberConfig{
+						ConsumerGroup:    params.HandlerName,
+						SchemaAdapter:    watermillsql.DefaultPostgreSQLSchema{},
+						OffsetsAdapter:   watermillsql.DefaultPostgreSQLOffsetsAdapter{},
+						InitializeSchema: true, // Ensure offsets table exists
+					},
+					logger,
+				)
+			},
+			Marshaler: cqrs.JSONMarshaler{},
+			Logger:    logger,
+		},
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	listenerProcessor, err := cqrs.NewEventProcessorWithConfig(
 		router,
 		cqrs.EventProcessorConfig{
 			GenerateSubscribeTopic: func(params cqrs.EventProcessorGenerateSubscribeTopicParams) (string, error) {
@@ -381,7 +430,12 @@ func main() {
 		panic(err)
 	}
 
-	err = subscribe(eventProcessor, instanceID)
+	err = subscribeWorker(workerProcessor, instanceID)
+	if err != nil {
+		panic(err)
+	}
+
+	err = subscribeListener(listenerProcessor, instanceID)
 	if err != nil {
 		panic(err)
 	}
@@ -402,9 +456,18 @@ func main() {
 	}
 }
 
-func subscribe(eventProcessor *cqrs.EventProcessor, instanceID string) error {
+func subscribeWorker(eventProcessor *cqrs.EventProcessor, instanceID string) error {
 	// Register the Handler
-	return eventProcessor.AddHandlers(&OrderCreatedHandler{InstanceID: instanceID})
+	return eventProcessor.AddHandlers(
+		&OrderCreatedWorker{InstanceID: instanceID},
+	)
+}
+
+func subscribeListener(eventProcessor *cqrs.EventProcessor, instanceID string) error {
+	// Register the Handler
+	return eventProcessor.AddHandlers(
+		&OrderCreatedListener{InstanceID: instanceID},
+	)
 }
 
 func publish(eventBus EventBus, instanceID string) {

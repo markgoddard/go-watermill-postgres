@@ -1,4 +1,8 @@
-# Demo of fan-out event handling using Go Watermill and PostgreSQL
+# Demo of event handling in Go using Watermill and PostgreSQL
+
+Aims:
+Demonstrate how [Watermill](https://watermill.io/) can be used in a Go application with a PostgreSQL backend to enable an Event-Driven Architecture (EDA).
+Consume events using both fan-out/broadcast and queuing semantics.
 
 Start the postgres container:
 
@@ -18,6 +22,8 @@ In another terminal, start a second instance of the application:
 go run main.go
 ```
 
-You should see both application instances publishing an event every 3 seconds, and each receiving every event published.
+You should see both application instances publishing an event every 3 seconds.
+Each instance should receive every event as a `LISTENER` (fan-out/broadcast semantics).
+One instance should receive every event as a `WORKER` (queue semantics).
 
-Created with help from Gemini.
+*Created with help from Gemini.*
