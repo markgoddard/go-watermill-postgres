@@ -1,8 +1,8 @@
 # Demo of event handling in Go using Watermill and PostgreSQL
 
 Aims:
-Demonstrate how [Watermill](https://watermill.io/) can be used in a Go application with a PostgreSQL backend to enable an Event-Driven Architecture (EDA).
-Consume events using both fan-out/broadcast and queuing semantics.
+* Demonstrate how [Watermill](https://watermill.io/) can be used in a Go application with a PostgreSQL backend to enable an Event-Driven Architecture (EDA).
+* Consume events using both fan-out/broadcast and queuing semantics.
 
 Start the postgres container:
 
