@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill"
-	watermillsql "github.com/ThreeDotsLabs/watermill-sql/v2/pkg/sql"
+	watermillsql "github.com/ThreeDotsLabs/watermill-sql/v4/pkg/sql"
 	"github.com/ThreeDotsLabs/watermill/components/cqrs"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
@@ -328,7 +328,7 @@ func main() {
 
 	// --- 4. Define SQL Publisher (To send events) ---
 	publisher, err := watermillsql.NewPublisher(
-		db,
+		watermillsql.BeginnerFromStdSQL(db),
 		watermillsql.PublisherConfig{
 			SchemaAdapter: watermillsql.DefaultPostgreSQLSchema{},
 		},
@@ -378,7 +378,7 @@ func main() {
 				// !!! KEY LOGIC FOR QUEUE !!!
 				// Single consumer group per handler - each event is handled by one subscriber.
 				return watermillsql.NewSubscriber(
-					db,
+					watermillsql.BeginnerFromStdSQL(db),
 					watermillsql.SubscriberConfig{
 						ConsumerGroup:    params.HandlerName,
 						SchemaAdapter:    watermillsql.DefaultPostgreSQLSchema{},
@@ -412,7 +412,7 @@ func main() {
 				uniqueConsumerGroup := fmt.Sprintf("%s_%s", params.HandlerName, instanceID)
 
 				return watermillsql.NewSubscriber(
-					db,
+					watermillsql.BeginnerFromStdSQL(db),
 					watermillsql.SubscriberConfig{
 						ConsumerGroup:    uniqueConsumerGroup,
 						SchemaAdapter:    watermillsql.DefaultPostgreSQLSchema{},
